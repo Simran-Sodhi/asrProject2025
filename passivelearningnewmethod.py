@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import boto3
+
 """## Data Class"""
 
 class CellSegmentationDataset(Dataset):
@@ -281,5 +283,25 @@ test_df.to_csv("PassiveLearningTestDiceScores.csv", index=False)
 print("Saved train/test Dice scores to CSV")
 
 torch.save(model.state_dict(), "resnet34_model_all_data.pt")
+
+BUCKET_NAME = 'live-cell-data'
+
+# Initialize the boto3 S3 client
+s3 = boto3.client('s3')
+
+# Upload individual files
+s3.upload_file('resnet34_model_all_data.pt', BUCKET_NAME, 'resnet34_model_all_data.pt')
+s3.upload_file('PassiveLearningTrainDiceScores.csv', BUCKET_NAME, 'PassiveLearningTrainDiceScores.csv')
+s3.upload_file('PassiveLearningTestDiceScores.csv', BUCKET_NAME, 'PassiveLearningTestDiceScores.csv')
+
+# Upload all files in the 'results/' folder
+results_dir = 'results'
+for filename in os.listdir(results_dir):
+    local_path = os.path.join(results_dir, filename)
+    s3_path = f"results/{filename}"  # You can customize this path in the bucket
+    if os.path.isfile(local_path):
+        print(f"Uploading {local_path} to s3://{BUCKET_NAME}/{s3_path}")
+        s3.upload_file(local_path, BUCKET_NAME, s3_path)
+
 
 os.system('sudo shutdown now')
