@@ -58,9 +58,9 @@ def unpad_to_shape(x, original_h, original_w):
 
 """## Load Data"""
 
-train_ds = CellSegmentationDataset("../../data/images_train", "../../data/masks_train")
-val_ds =  CellSegmentationDataset("../../data/images_val", "../../data/masks_val")
-test_ds = CellSegmentationDataset("../../data/images_test", "../../data/masks_test")
+train_ds = CellSegmentationDataset("../data/images_train", "../data/masks_train")
+val_ds =  CellSegmentationDataset("../data/images_val", "../data/masks_val")
+test_ds = CellSegmentationDataset("../data/images_test", "../data/masks_test")
 
 train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
 val_loader = DataLoader(val_ds, batch_size=4)
