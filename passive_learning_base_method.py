@@ -1,8 +1,8 @@
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import Subset
-import segmentation_models_pytorch as smp
 
 import cv2
 import os
@@ -56,6 +56,63 @@ def pad_to_multiple(x, multiple=32):
 def unpad_to_shape(x, original_h, original_w):
     return x[..., :original_h, :original_w]
 
+
+class UNet(nn.Module):
+    def __init__(self):
+        super(UNet, self).__init__()
+
+        def CBR(in_ch, out_ch):
+            return nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_ch, out_ch, 3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Dropout2d(0.2)
+                )
+
+        # Encoder levels
+        self.enc1 = CBR(1, 64)
+        self.enc2 = CBR(64, 128)
+        self.enc3 = CBR(128, 256)
+        self.enc4 = CBR(256, 512)
+        self.pool = nn.MaxPool2d(2)
+
+        # Decoder levels
+        self.up3 = nn.ConvTranspose2d(512, 256, 2, stride=2)
+        self.dec3 = CBR(512, 256)  # using skip from enc3
+        self.up2 = nn.ConvTranspose2d(256, 128, 2, stride=2)
+        self.dec2 = CBR(256, 128)  # using skip from enc2
+        self.up1 = nn.ConvTranspose2d(128, 64, 2, stride=2)
+        self.dec1 = CBR(128, 64)   # using skip from enc1
+
+        self.final = nn.Conv2d(64, 1, kernel_size=1)
+
+    def forward(self, x):
+        # Encoder
+        e1 = self.enc1(x)                   # (B, 64, H, W)
+        e2 = self.enc2(self.pool(e1))         # (B, 128, H/2, W/2)
+        e3 = self.enc3(self.pool(e2))         # (B, 256, H/4, W/4)
+        e4 = self.enc4(self.pool(e3))         # (B, 512, H/8, W/8)
+
+        # Decoder
+        d3 = self.up3(e4)                   # (B, 256, H/4, W/4)
+        d3 = torch.cat([d3, e3], dim=1)       # (B, 256+256, H/4, W/4)
+        d3 = self.dec3(d3)                  # (B, 256, H/4, W/4)
+
+        d2 = self.up2(d3)                   # (B, 128, H/2, W/2)
+        d2 = torch.cat([d2, e2], dim=1)       # (B, 128+128, H/2, W/2)
+        d2 = self.dec2(d2)                  # (B, 128, H/2, W/2)
+
+        d1 = self.up1(d2)                   # (B, 64, H, W)
+        d1 = torch.cat([d1, e1], dim=1)       # (B, 64+64, H, W)
+        d1 = self.dec1(d1)                  # (B, 64, H, W)
+
+        out = self.final(d1)
+        return torch.sigmoid(out)
+
+    
 """## Load Data"""
 
 train_ds = CellSegmentationDataset("../data/images_train", "../data/masks_train")
@@ -76,105 +133,99 @@ test_loader = DataLoader(test_ds, batch_size=1)
 
 # train_loader = DataLoader(train_subset, batch_size=2, shuffle=True)
 
-# subset_indices = random.sample(range(len(test_ds)), 10)
-# test_subset = Subset(test_ds, subset_indices)
-# test_loader =  DataLoader(test_subset, batch_size=1)
+subset_indices = random.sample(range(len(test_ds)), 20)
+test_subset = Subset(test_ds, subset_indices)
+test_loader =  DataLoader(test_subset, batch_size=1)
 
 """## UNet Model Definition"""
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
-model = smp.Unet(
-    encoder_name="resnet34",
-    encoder_weights="imagenet",
-    in_channels=1,
-    classes=1,
-    activation="sigmoid"
-).to(device)
+print(f"Using device: {device}")
+
+model = UNet().to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+criterion = nn.BCELoss()
 
 """## Training"""
 
-# loss_fn = smp.losses.DiceLoss(mode='binary')
-# optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+num_epochs = 10
+for epoch in range(num_epochs):
+    model.train()
+    total_loss = 0.0
+    for imgs, masks, _ in train_loader:
+        imgs, masks = imgs.to(device), masks.to(device)
 
-# num_epochs = 10
-# for epoch in range(num_epochs):
-#     model.train()
-#     total_loss = 0.0
-#     for imgs, masks, _ in train_loader:
-#         imgs, masks = imgs.to(device), masks.to(device)
+        preds = model(imgs)
+        loss = criterion(preds, masks)
 
-#         preds = model(imgs)
-#         loss = loss_fn(preds, masks)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-#         optimizer.zero_grad()
-#         loss.backward()
-#         optimizer.step()
+        total_loss += loss.item()
 
-#         total_loss += loss.item()
-
-#     print(f"[Epoch {epoch+1}] Training Loss: {total_loss / len(train_loader):.4f}")
+    print(f"[Epoch {epoch+1}] Training Loss: {total_loss / len(train_loader):.4f}")
 
 """## Evaluation/Testing"""
 
-# model.eval()
-# test_dice = 0.0
-# with torch.no_grad():
-#     for img, mask, _ in test_loader:
-#         img, mask = img.to(device), mask.to(device)
-#         pred = model(img)
-#         pred_bin = (pred > 0.5).float()
+model.eval()
+test_dice = 0.0
+with torch.no_grad():
+    for img, mask, _ in test_loader:
+        img, mask = img.to(device), mask.to(device)
+        pred = model(img)
+        pred_bin = (pred > 0.5).float()
 
-#         intersection = (pred_bin * mask).sum()
-#         union = pred_bin.sum() + mask.sum()
-#         dice = (2 * intersection) / (union + 1e-8)
-#         test_dice += dice.item()
+        intersection = (pred_bin * mask).sum()
+        union = pred_bin.sum() + mask.sum()
+        dice = (2 * intersection) / (union + 1e-8)
+        test_dice += dice.item()
 
-# print(f"Test Dice Score: {test_dice / len(test_loader):.4f}")
+print(f"Test Dice Score: {test_dice / len(test_loader):.4f}")
 
 """## Visualization of test predictions"""
 
-# os.makedirs("results", exist_ok=True)
+os.makedirs("results_naive_model", exist_ok=True)
 
-# def show_prediction(img, mask, filename, save=True):
-#     model.eval()
-#     with torch.no_grad():
-#         pred = model(img.unsqueeze(0).to(device))
-#         pred_bin = (pred > 0.5).float().squeeze().cpu().numpy()
+def show_prediction(img, mask, filename, save=True):
+    model.eval()
+    with torch.no_grad():
+        pred = model(img.unsqueeze(0).to(device))
+        pred_bin = (pred > 0.5).float().squeeze().cpu().numpy()
 
-#     pred_unpadded = unpad_to_shape(pred_bin, 520, 704)
-#     img_unpadded = unpad_to_shape(img.squeeze(0), 520, 704)
-#     mask_unpadded = unpad_to_shape(mask.squeeze(0), 520, 704)
+    pred_unpadded = unpad_to_shape(pred_bin, 520, 704)
+    img_unpadded = unpad_to_shape(img.squeeze(0), 520, 704)
+    mask_unpadded = unpad_to_shape(mask.squeeze(0), 520, 704)
 
-#     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-#     axs[0].imshow(img_unpadded, cmap='gray')
-#     axs[0].set_title("Input Image")
-#     axs[0].axis('off')
+    axs[0].imshow(img_unpadded, cmap='gray')
+    axs[0].set_title("Input Image")
+    axs[0].axis('off')
 
-#     axs[1].imshow(mask_unpadded, cmap='gray')
-#     axs[1].set_title("Ground Truth")
-#     axs[1].axis('off')
+    axs[1].imshow(mask_unpadded, cmap='gray')
+    axs[1].set_title("Ground Truth")
+    axs[1].axis('off')
 
-#     axs[2].imshow(pred_unpadded, cmap='gray')
-#     axs[2].set_title("Predicted Mask")
-#     axs[2].axis('off')
+    axs[2].imshow(pred_unpadded, cmap='gray')
+    axs[2].set_title("Predicted Mask")
+    axs[2].axis('off')
 
-#     plt.tight_layout()
+    plt.tight_layout()
 
-#     if save:
-#         # Ensure filename is safe
-#         base_name = os.path.splitext(os.path.basename(filename))[0]
-#         save_path = f"results/{base_name}_prediction.png"
-#         plt.savefig(save_path, bbox_inches='tight')
-#         print(f"Saved prediction to {save_path}")
-#     else:
-#         plt.show()
-#     plt.close(fig)
+    if save:
+        # Ensure filename is safe
+        base_name = os.path.splitext(os.path.basename(filename))[0]
+        save_path = f"results_naive_model/{base_name}_prediction.png"
+        plt.savefig(save_path, bbox_inches='tight')
+        print(f"Saved prediction to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
 
-# for test in test_ds:
-#     img, mask, fname = test
-#     show_prediction(img, mask, filename=fname)
+for test in test_subset:
+    img, mask, fname = test
+    show_prediction(img, mask, filename=fname)
 
 """# Passive Learning Style Training"""
 
@@ -182,9 +233,9 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5):
     subset = Subset(dataset, subset_indices)
     loader = DataLoader(subset, batch_size=4, shuffle=True)
 
-    model = smp.Unet("resnet34", encoder_weights="imagenet", in_channels=1, classes=1, activation="sigmoid").to(device)
-    loss_fn = smp.losses.DiceLoss(mode='binary')
+    model = UNet().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    criterion = nn.BCELoss()
 
     # Training
     model.train()
@@ -192,7 +243,8 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5):
         for imgs, masks, _ in loader:
             imgs, masks = imgs.to(device), masks.to(device)
             preds = model(imgs)
-            loss = loss_fn(preds, masks)
+            loss = criterion(preds, masks)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -254,11 +306,11 @@ std_dev = np.array([np.std(train_results[s]) for s in dataset_sizes])
 plt.plot(dataset_sizes, means, '-o')
 plt.fill_between(dataset_sizes, means - std_dev, means + std_dev, alpha=0.3)
 #plt.errorbar(dataset_sizes, means, yerr=std_dev, fmt='-o', capsize=5)
-plt.title("Passive Learning: Mean Training Dice Score vs Training Set Size")
+plt.title("Passive Learning (Naive UNet Model): Mean Training Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Test Set Dice Score")
 plt.grid(True)
-plt.savefig("PassiveLearningMeanTrainingDiceScoreLighterRun.png", bbox_inches='tight')
+plt.savefig("PassiveLearningMeanTrainingDiceScoreNaiveModel.png", bbox_inches='tight')
 print("Saved Figure")
 plt.show()
 
@@ -267,23 +319,23 @@ std_dev = np.array([np.std(test_results[s]) for s in dataset_sizes])
 plt.plot(dataset_sizes, means, '-o')
 plt.fill_between(dataset_sizes, means - std_dev, means + std_dev, alpha=0.3)
 #plt.errorbar(dataset_sizes, means, yerr=std_dev, fmt='-o', capsize=5)
-plt.title("Passive Learning: Mean Test Set Dice Score vs Training Set Size")
+plt.title("Passive Learning (Naive UNet Model): Mean Test Set Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Test Set Dice Score")
 plt.grid(True)
-plt.savefig("PassiveLearningMeanTestDiceScoreLighterRun.png", bbox_inches='tight')
+plt.savefig("PassiveLearningMeanTestDiceScoreNaiveModel.png", bbox_inches='tight')
 print("Saved Figure")
 plt.show()
 
 train_df = pd.DataFrame(train_results)
-train_df.to_csv("PassiveLearningTrainDiceScoresLighterRun.csv", index=False)
+train_df.to_csv("PassiveLearningTrainDiceScoresNaiveModel.csv", index=False)
 
 test_df = pd.DataFrame(test_results)
-test_df.to_csv("PassiveLearningTestDiceScoresLighterRun.csv", index=False)
+test_df.to_csv("PassiveLearningTestDiceScoresNaiveModel.csv", index=False)
 
 print("Saved train/test Dice scores to CSV")
 
-#torch.save(model.state_dict(), "resnet34_model_all_data.pt")
+torch.save(model.state_dict(), "naive_model_all_data.pt")
 
 BUCKET_NAME = 'live-cell-data'
 
@@ -291,20 +343,20 @@ BUCKET_NAME = 'live-cell-data'
 s3 = boto3.client('s3')
 
 # Upload individual files
-#s3.upload_file('resnet34_model_all_data.pt', BUCKET_NAME, 'resnet34_model_all_data.pt')
-s3.upload_file('PassiveLearningTrainDiceScoresLighterRun.csv', BUCKET_NAME, 'PassiveLearningTrainDiceScoresLighterRun.csv')
-s3.upload_file('PassiveLearningTestDiceScoresLighterRun.csv', BUCKET_NAME, 'PassiveLearningTestDiceScoresLighterRun.csv')
-s3.upload_file('PassiveLearningMeanTestDiceScoreLighterRun.png', BUCKET_NAME, 'PassiveLearningMeanTestDiceScoreLighterRun.png')
-s3.upload_file('PassiveLearningMeanTrainingDiceScoreLighterRun.png', BUCKET_NAME, 'PassiveLearningMeanTrainingDiceScoreLighterRun.png')
+s3.upload_file('naive_model_all_data.pt', BUCKET_NAME, 'naive_model_all_data.pt')
+s3.upload_file('PassiveLearningTrainDiceScoresNaiveModel.csv', BUCKET_NAME, 'PassiveLearningTrainDiceScoresNaiveModel.csv')
+s3.upload_file('PassiveLearningTestDiceScoresNaiveModel.csv', BUCKET_NAME, 'PassiveLearningTestDiceScoresNaiveModel.csv')
+s3.upload_file('PassiveLearningMeanTestDiceScoreNaiveModel.png', BUCKET_NAME, 'PassiveLearningMeanTestDiceScoreNaiveModel.png')
+s3.upload_file('PassiveLearningMeanTrainingDiceScoreNaiveModel.png', BUCKET_NAME, 'PassiveLearningMeanTrainingDiceScoreNaiveModel.png')
 
-# Upload all files in the 'results/' folder
-# results_dir = 'results'
-# for filename in os.listdir(results_dir):
-#     local_path = os.path.join(results_dir, filename)
-#     s3_path = f"results/{filename}"  # You can customize this path in the bucket
-#     if os.path.isfile(local_path):
-#         print(f"Uploading {local_path} to s3://{BUCKET_NAME}/{s3_path}")
-#         s3.upload_file(local_path, BUCKET_NAME, s3_path)
+#Upload all files in the 'results/' folder
+results_dir = 'results_naive_model'
+for filename in os.listdir(results_dir):
+    local_path = os.path.join(results_dir, filename)
+    s3_path = f"results_naive_model/{filename}"
+    if os.path.isfile(local_path):
+        print(f"Uploading {local_path} to s3://{BUCKET_NAME}/{s3_path}")
+        s3.upload_file(local_path, BUCKET_NAME, s3_path)
 
 
 os.system('sudo shutdown now')
