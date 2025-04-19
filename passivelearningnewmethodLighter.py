@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 
 import boto3
 
+os.makedirs("results", exist_ok=True)
+
 """## Data Class"""
 
 class CellSegmentationDataset(Dataset):
@@ -134,7 +136,6 @@ model = smp.Unet(
 
 """## Visualization of test predictions"""
 
-# os.makedirs("results", exist_ok=True)
 
 # def show_prediction(img, mask, filename, save=True):
 #     model.eval()
