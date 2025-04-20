@@ -7,6 +7,8 @@
 # Ignore results and model output directories
 results/
 saved_models_pretrained/
+*.png
+*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
