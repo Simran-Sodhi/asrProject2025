@@ -87,7 +87,7 @@ test_loader = DataLoader(test_ds, batch_size=1)
 """## UNet Model Definition"""
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
+print(f"Using device: {device}")
 # model = smp.Unet(
 #     encoder_name="resnet34",
 #     encoder_weights="imagenet",

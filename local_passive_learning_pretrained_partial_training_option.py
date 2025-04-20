@@ -76,13 +76,9 @@ train_ds = CellSegmentationDataset("../data/images_train", "../data/masks_train"
 val_ds =  CellSegmentationDataset("../data/images_val", "../data/masks_val")
 test_ds = CellSegmentationDataset("../data/images_test", "../data/masks_test")
 
-train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
-val_loader = DataLoader(val_ds, batch_size=4)
-test_loader = DataLoader(test_ds, batch_size=1)
-
 ## Use a small subset due to local compute limitations
+# Randomly pick 10 indices from the training and testing dataset
 
-# Randomly pick 10 indices from the training dataset
 subset_indices = random.sample(range(len(train_ds)), 10)
 
 test_subset_indices = random.sample(range(len(test_ds)), 10)
@@ -92,7 +88,7 @@ test_subset_loader =  DataLoader(test_subset, batch_size=1)
 """## UNet Model Definition"""
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
+print(f"Using device: {device}")
 
 def show_prediction(model, img, mask, results_dir, filename, save=True):
     model.eval()
@@ -121,9 +117,7 @@ def show_prediction(model, img, mask, results_dir, filename, save=True):
     plt.tight_layout()
 
     if save:
-        # Ensure filename is safe
-        base_name = os.path.splitext(os.path.basename(filename))[0]
-        save_path = f"{results_dir}/{base_name}_prediction.png"
+        save_path = f"{results_dir}/{filename}_prediction.png"
         plt.savefig(save_path, bbox_inches='tight')
         print(f"Saved prediction to {save_path}")
     else:
@@ -151,7 +145,7 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, war
             loss.backward()
             optimizer.step()
 
-            
+
     # Evaluation on training set after last epoch
     model.eval()
     train_dice_scores = []
@@ -180,10 +174,6 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, war
             test_dice_scores.append(dice.item())
     final_test_dice = np.mean(test_dice_scores)
 
-    ## Prediction
-    for img, mask, fname in test_subset:
-        show_prediction(model, img, mask, results_dir, filename=fname)
-        break  # Only one image, just to check
     return final_train_dice, final_test_dice, model
 
 
@@ -216,6 +206,14 @@ for sim in range(n_simulations):
             current_subset = shuffled_indices[start_idx:size]  # only new data since partial training
         print(f"  Training on {size} samples...", end="")
         train_dice, test_dice, warm_model = evaluate_model_on_subset(train_ds, current_subset, test_subset_loader, warm_model=warm_model if USE_WARM_START else None)
+        
+        ## Prediction
+        for img, mask, fname in test_subset:
+            base_name = os.path.splitext(os.path.basename(fname))[0]
+            file_name = f"{base_name}_sim_{sim}_train_size_{size}"
+            show_prediction(warm_model, img, mask, results_dir, filename=file_name)
+            break  # Only one image, just to check
+
         model_path = f"{model_dir}/model_sim{sim}_size{size}.pt"
         torch.save(warm_model.to('cpu').state_dict(), model_path)
         print(f"Saved model to {model_path}")
