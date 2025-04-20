@@ -1,0 +1,20 @@
+# Ignore Jupyter/IPython notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore macOS DS_Store files
+.DS_Store
+
+# Ignore results and model output directories
+results/
+saved_models_pretrained/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment and config
+.env
+.venv/
+env/
+venv/
