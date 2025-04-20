@@ -13,14 +13,23 @@ import matplotlib.pyplot as plt
 
 import boto3
 
-results_dir = 'results'
-os.makedirs(results_dir, exist_ok=True)
-model_dir = "saved_models_pretrained"
-os.makedirs(model_dir, exist_ok=True)
 torch.manual_seed(0)
 
 USE_WARM_START = True
 RESET_EVERY_N = 3  
+
+
+name_extension = "passive_learning_partial_training_aws"
+model_dir = f"{name_extension}/models"
+results_dir = f'{name_extension}/results'
+title_prefix = "Passive Learning"
+plot_dir = f"{name_extension}/plots"
+plots_title_prefix = "Passive Learning"
+
+os.makedirs(results_dir, exist_ok=True)
+os.makedirs(model_dir, exist_ok=True)
+os.makedirs(plot_dir, exist_ok=True)
+
 
 """## Data Class"""
 
@@ -250,37 +259,33 @@ for sim in range(n_simulations):
 
         print(f"  Training on {size} samples...", end="")
         train_dice, test_dice, warm_model = evaluate_model_on_subset(train_ds, current_subset, test_loader, warm_model=warm_model if USE_WARM_START else None)
-        model_path = f"saved_models_pretrained/model_sim{sim}_size{size}.pt"
+        model_path = f"{model_dir}/model_sim{sim}_size{size}.pt"
         torch.save(warm_model.to('cpu').state_dict(), model_path)
         print(f"Saved model to {model_path}")
         print(f" Train Dice = {train_dice:.4f}", f" Test Dice = {test_dice:.4f}")
         train_results.setdefault(size, []).append(train_dice)
         test_results.setdefault(size, []).append(test_dice)
 
-name_extension = "passive_learning_partial_training_aws"
-title_prefix = "Passive Learning"
 means_train = np.array([np.mean(train_results[s]) for s in dataset_sizes])
 stds_train = np.array([np.std(train_results[s]) for s in dataset_sizes])
 plt.plot(dataset_sizes, means_train, '-o')
 plt.fill_between(dataset_sizes, means_train - stds_train, means_train + stds_train, alpha=0.3)
-plt.title(f"{title_prefix}: Mean Training Dice Score vs Training Set Size")
+plt.title(f"{plots_title_prefix}: Mean Training Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Train Set Dice Score")
 plt.grid(True)
-plt.savefig(f"MeanTrainingDiceScore{name_extension}.png", bbox_inches='tight')
-print("Saved Figure")
+plt.savefig(f"{plot_dir}/MeanTrainingDiceScore.png", bbox_inches='tight')
 #plt.show()
 
 means_test = np.array([np.mean(test_results[s]) for s in dataset_sizes])
 stds_test = np.array([np.std(test_results[s]) for s in dataset_sizes])
 plt.plot(dataset_sizes, means_test, '-o')
 plt.fill_between(dataset_sizes, means_test - stds_test, means_test + stds_test, alpha=0.3)
-plt.title(f"{title_prefix}: Mean Test Set Dice Score vs Training Set Size")
+plt.title(f"{plots_title_prefix}: Mean Test Set Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Test Set Dice Score")
 plt.grid(True)
-plt.savefig(f"MeanTestDiceScore{name_extension}.png", bbox_inches='tight')
-print("Saved Figure")
+plt.savefig(f"{plot_dir}/MeanTestDiceScore.png", bbox_inches='tight')
 #plt.show()
 
 
@@ -291,7 +296,7 @@ plt.fill_between(dataset_sizes, means_train - stds_train, means_train + stds_tra
 plt.fill_between(dataset_sizes, means_test - stds_test, means_test + stds_test, color='orange', alpha=0.3)
 
 # Labels and legend
-plt.title(f"{title_prefix}: Mean Dice Score vs Training Set Size")
+plt.title(f"{plots_title_prefix}: Mean Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Dice Score")
 plt.legend()
@@ -300,14 +305,16 @@ plt.grid(True)
 
 # Save or show
 plt.tight_layout()
-plt.savefig(f"MeanBothDiceScore{name_extension}.png", dpi=300)
+plt.savefig(f"{plot_dir}/MeanBothDiceScore.png", dpi=300)
 #plt.show()
 
+print("Saved Figures")
+
 train_df = pd.DataFrame(train_results)
-train_df.to_csv(f"TrainDiceScores{name_extension}.csv", index=False)
+train_df.to_csv(f"{plot_dir}/TrainDiceScores.csv", index=False)
 
 test_df = pd.DataFrame(test_results)
-test_df.to_csv(f"TestDiceScores{name_extension}.csv", index=False)
+test_df.to_csv(f"{plot_dir}/TestDiceScores.csv", index=False)
 
 print("Saved train/test Dice scores to CSV")
 
@@ -320,23 +327,24 @@ s3 = boto3.client('s3')
 
 # Upload individual files
 #s3.upload_file('resnet34_model_all_data.pt', BUCKET_NAME, 'resnet34_model_all_data.pt')
-s3.upload_file(f"TrainDiceScores{name_extension}.csv", BUCKET_NAME, f"TrainDiceScores{name_extension}.csv")
-s3.upload_file(f"TestDiceScores{name_extension}.csv", BUCKET_NAME, f"TestDiceScores{name_extension}.csv")
-s3.upload_file(f"MeanTestDiceScore{name_extension}.png", BUCKET_NAME, f"MeanTestDiceScore{name_extension}.png")
-s3.upload_file(f"MeanTrainingDiceScore{name_extension}.png", BUCKET_NAME, f"MeanTrainingDiceScore{name_extension}.png")
-s3.upload_file(f"MeanBothDiceScore{name_extension}.png", BUCKET_NAME, f"MeanBothDiceScore{name_extension}.png")
+for filename in os.listdir(plot_dir):
+    local_path = os.path.join(plot_dir, filename)
+    s3_path = f"{plot_dir}/{filename}"
+    if os.path.isfile(local_path):
+        print(f"Uploading {local_path} to s3://{BUCKET_NAME}/{s3_path}")
+        s3.upload_file(local_path, BUCKET_NAME, s3_path)
 
 # Upload all files in the results_dir folder
 # for filename in os.listdir(results_dir):
 #     local_path = os.path.join(results_dir, filename)
-#     s3_path = f"results/{filename}"
+#     s3_path = f"{name_extension}/results/{filename}"
 #     if os.path.isfile(local_path):
 #         print(f"Uploading {local_path} to s3://{BUCKET_NAME}/{s3_path}")
 #         s3.upload_file(local_path, BUCKET_NAME, s3_path)
 
 for filename in os.listdir(model_dir):
     local_path = os.path.join(model_dir, filename)
-    s3_path = f"models/{filename}"
+    s3_path = f"{model_dir}/{filename}"
     if os.path.isfile(local_path):
         print(f"Uploading {local_path} to s3://{BUCKET_NAME}/{s3_path}")
         s3.upload_file(local_path, BUCKET_NAME, s3_path)

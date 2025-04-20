@@ -11,12 +11,21 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-os.makedirs("results", exist_ok=True)
-os.makedirs("saved_models_pretrained", exist_ok=True)
 torch.manual_seed(0)
 
 USE_WARM_START = True
 RESET_EVERY_N = 3  
+
+name_extension = "passive_learning_partial_training_local"
+model_dir = f"{name_extension}/models"
+results_dir = f'{name_extension}/results'
+title_prefix = "Passive Learning"
+plot_dir = f"{name_extension}/plots"
+plots_title_prefix = "Passive Learning"
+
+os.makedirs(results_dir, exist_ok=True)
+os.makedirs(model_dir, exist_ok=True)
+os.makedirs(plot_dir, exist_ok=True)
 
 """## Data Class"""
 
@@ -71,7 +80,7 @@ train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
 val_loader = DataLoader(val_ds, batch_size=4)
 test_loader = DataLoader(test_ds, batch_size=1)
 
-"""## This is done cause of compute issues"""
+## Use a small subset due to local compute limitations
 
 # Randomly pick 10 indices from the training dataset
 subset_indices = random.sample(range(len(train_ds)), 10)
@@ -85,7 +94,7 @@ test_subset_loader =  DataLoader(test_subset, batch_size=1)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
 
-def show_prediction(model, img, mask, filename, save=True):
+def show_prediction(model, img, mask, results_dir, filename, save=True):
     model.eval()
     with torch.no_grad():
         pred = model(img.unsqueeze(0).to(device))
@@ -114,7 +123,7 @@ def show_prediction(model, img, mask, filename, save=True):
     if save:
         # Ensure filename is safe
         base_name = os.path.splitext(os.path.basename(filename))[0]
-        save_path = f"results/{base_name}_prediction.png"
+        save_path = f"{results_dir}/{base_name}_prediction.png"
         plt.savefig(save_path, bbox_inches='tight')
         print(f"Saved prediction to {save_path}")
     else:
@@ -141,6 +150,8 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, war
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            
     # Evaluation on training set after last epoch
     model.eval()
     train_dice_scores = []
@@ -168,7 +179,13 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, war
             dice = (2 * inter) / (union + 1e-8)
             test_dice_scores.append(dice.item())
     final_test_dice = np.mean(test_dice_scores)
+
+    ## Prediction
+    for img, mask, fname in test_subset:
+        show_prediction(model, img, mask, results_dir, filename=fname)
+        break  # Only one image, just to check
     return final_train_dice, final_test_dice, model
+
 
 initial_size = 1
 increment = 1
@@ -199,38 +216,33 @@ for sim in range(n_simulations):
             current_subset = shuffled_indices[start_idx:size]  # only new data since partial training
         print(f"  Training on {size} samples...", end="")
         train_dice, test_dice, warm_model = evaluate_model_on_subset(train_ds, current_subset, test_subset_loader, warm_model=warm_model if USE_WARM_START else None)
-        model_path = f"saved_models_pretrained/model_sim{sim}_size{size}.pt"
+        model_path = f"{model_dir}/model_sim{sim}_size{size}.pt"
         torch.save(warm_model.to('cpu').state_dict(), model_path)
         print(f"Saved model to {model_path}")
         print(f" Train Dice = {train_dice:.4f}", f" Test Dice = {test_dice:.4f}")
         train_results.setdefault(size, []).append(train_dice)
         test_results.setdefault(size, []).append(test_dice)
 
-name_extension = "PassiveLearningPartialTrainingLocal"
-title_prefix = "Passive Learning"
-
 means_train = np.array([np.mean(train_results[s]) for s in dataset_sizes])
 stds_train = np.array([np.std(train_results[s]) for s in dataset_sizes])
 plt.plot(dataset_sizes, means_train, '-o')
 plt.fill_between(dataset_sizes, means_train - stds_train, means_train + stds_train, alpha=0.3)
-plt.title(f"{title_prefix}: Mean Training Dice Score vs Training Set Size")
+plt.title(f"{plots_title_prefix}: Mean Training Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Train Set Dice Score")
 plt.grid(True)
-plt.savefig(f"MeanTrainingDiceScore{name_extension}.png", bbox_inches='tight')
-print("Saved Figure")
+plt.savefig(f"{plot_dir}/MeanTrainingDiceScore.png", bbox_inches='tight')
 plt.show()
 
 means_test = np.array([np.mean(test_results[s]) for s in dataset_sizes])
 stds_test = np.array([np.std(test_results[s]) for s in dataset_sizes])
 plt.plot(dataset_sizes, means_test, '-o')
 plt.fill_between(dataset_sizes, means_test - stds_test, means_test + stds_test, alpha=0.3)
-plt.title(f"{title_prefix}: Mean Test Set Dice Score vs Training Set Size")
+plt.title(f"{plots_title_prefix}: Mean Test Set Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Test Set Dice Score")
 plt.grid(True)
-plt.savefig(f"MeanTestDiceScore{name_extension}.png", bbox_inches='tight')
-print("Saved Figure")
+plt.savefig(f"{plot_dir}/MeanTestDiceScore.png", bbox_inches='tight')
 plt.show()
 
 
@@ -241,7 +253,7 @@ plt.fill_between(dataset_sizes, means_train - stds_train, means_train + stds_tra
 plt.fill_between(dataset_sizes, means_test - stds_test, means_test + stds_test, color='orange', alpha=0.3)
 
 # Labels and legend
-plt.title(f"{title_prefix}: Mean Dice Score vs Training Set Size")
+plt.title(f"{plots_title_prefix}: Mean Dice Score vs Training Set Size")
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Dice Score")
 plt.legend()
@@ -250,13 +262,15 @@ plt.grid(True)
 
 # Save or show
 plt.tight_layout()
-plt.savefig(f"MeanBothDiceScore{name_extension}.png", dpi=300)
+plt.savefig(f"{plot_dir}/MeanBothDiceScore.png", dpi=300)
 plt.show()
 
+print("Saved Figures")
+
 train_df = pd.DataFrame(train_results)
-train_df.to_csv(f"TrainDiceScores{name_extension}.csv", index=False)
+train_df.to_csv(f"{plot_dir}/TrainDiceScores.csv", index=False)
 
 test_df = pd.DataFrame(test_results)
-test_df.to_csv(f"TestDiceScores{name_extension}.csv", index=False)
+test_df.to_csv(f"{plot_dir}/TestDiceScores.csv", index=False)
 
 print("Saved train/test Dice scores to CSV")
