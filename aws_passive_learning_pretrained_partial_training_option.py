@@ -186,6 +186,7 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, war
     loader = DataLoader(subset, batch_size=4, shuffle=True)
 
     model = warm_model if warm_model else smp.Unet("resnet34", encoder_weights="imagenet", in_channels=1, classes=1, activation="sigmoid").to(device)
+    model = model.to(device)
     loss_fn = smp.losses.DiceLoss(mode='binary')
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
