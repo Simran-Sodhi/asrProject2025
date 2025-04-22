@@ -13,8 +13,6 @@ import matplotlib.pyplot as plt
 
 import boto3
 
-torch.manual_seed(0)
-
 USE_WARM_START = True
 RESET_EVERY_N = 3  
 
@@ -30,6 +28,13 @@ os.makedirs(results_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
 os.makedirs(plot_dir, exist_ok=True)
 
+def set_all_seeds(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 """## Data Class"""
 
@@ -80,9 +85,9 @@ train_ds = CellSegmentationDataset("../data/images_train", "../data/masks_train"
 val_ds =  CellSegmentationDataset("../data/images_val", "../data/masks_val")
 test_ds = CellSegmentationDataset("../data/images_test", "../data/masks_test")
 
-train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
-val_loader = DataLoader(val_ds, batch_size=4)
-test_loader = DataLoader(test_ds, batch_size=1)
+train_loader = DataLoader(train_ds, batch_size=4, shuffle=True, num_workers=0)
+val_loader = DataLoader(val_ds, batch_size=4, num_workers=0)
+test_loader = DataLoader(test_ds, batch_size=1, num_workers=0)
 
 """## UNet Model Definition"""
 
@@ -181,10 +186,10 @@ def show_prediction(model, img, mask, results_dir, filename, save=True):
 
 """# Passive Learning Style Training"""
 
-def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, warm_model=None):
+def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, warm_model=None, seed = 0):
     subset = Subset(dataset, subset_indices)
-    loader = DataLoader(subset, batch_size=4, shuffle=True)
-
+    loader = DataLoader(subset, batch_size=4, shuffle=True, num_workers=0)
+    set_all_seeds(seed)
     model = warm_model if warm_model else smp.Unet("resnet34", encoder_weights="imagenet", in_channels=1, classes=1, activation="sigmoid").to(device)
     model = model.to(device)
     loss_fn = smp.losses.DiceLoss(mode='binary')
@@ -240,9 +245,7 @@ dataset_sizes = list(range(initial_size, max_size + 1, increment))
 
 train_results, test_results = {}, {}
 for sim in range(n_simulations):
-    random.seed(sim)
-    np.random.seed(sim)
-    torch.manual_seed(sim)
+    set_all_seeds(sim)
     shuffled_indices = all_indices.copy()
     random.shuffle(shuffled_indices)
     
@@ -254,12 +257,17 @@ for sim in range(n_simulations):
         if reset_model:
             warm_model = None
             current_subset = shuffled_indices[:size]  # full subset up to this point
+            # DEBUG
+            if size == initial_size:
+                with open(f"{model_dir}/sim{sim}_initial100_filenames.txt", "w") as f:
+                    for idx in current_subset:
+                        f.write(train_ds.image_filenames[idx] + "\n")
         else:
             start_idx = size - increment if size != initial_size else 0
             current_subset = shuffled_indices[start_idx:size]  # only new data since partial training
 
         print(f"  Training on {size} samples...", end="")
-        train_dice, test_dice, warm_model = evaluate_model_on_subset(train_ds, current_subset, test_loader, warm_model=warm_model if USE_WARM_START else None)
+        train_dice, test_dice, warm_model = evaluate_model_on_subset(train_ds, current_subset, test_loader, warm_model=warm_model if USE_WARM_START else None, seed = sim)
         model_path = f"{model_dir}/model_sim{sim}_size{size}.pt"
         torch.save(warm_model.to('cpu').state_dict(), model_path)
         print(f"Saved model to {model_path}")
