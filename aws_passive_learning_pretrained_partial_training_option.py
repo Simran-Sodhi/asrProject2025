@@ -262,7 +262,7 @@ for sim in range(n_simulations):
                 with open(f"{model_dir}/sim{sim}_initial100_filenames.txt", "w") as f:
                     for idx in current_subset:
                         f.write(train_ds.image_filenames[idx] + "\n")
-                        print("saved file names")
+            print("saved file names")
         else:
             start_idx = size - increment if size != initial_size else 0
             current_subset = shuffled_indices[start_idx:size]  # only new data since partial training
