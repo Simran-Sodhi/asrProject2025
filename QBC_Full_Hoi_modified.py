@@ -258,7 +258,7 @@ def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5, war
             dice = (2 * inter) / (union + 1e-8)
             test_dice_scores.append(dice.item())
     final_test_dice = np.mean(test_dice_scores)
-    return final_train_dice, final_test_dice
+    return final_train_dice, final_test_dice, model
 
 initial_size = 100
 increment = 200
@@ -564,7 +564,7 @@ for filename in os.listdir(model_dir):
     if os.path.isfile(local_path):
         print(f"Uploading {local_path} to s3://{BUCKET_NAME}/{s3_path}")
         s3.upload_file(local_path, BUCKET_NAME, s3_path)
-        
+
 # Upload all files in the 'results/' folder
 # results_dir = 'results'
 # for filename in os.listdir(results_dir):
