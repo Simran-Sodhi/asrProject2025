@@ -277,34 +277,57 @@ dataset_sizes = list(range(initial_size, max_size + 1, increment))
 """
 # QBC Part:
 # QBC Part:
-def get_fisher_information_scores(model, dataset, unlabeled_indices):
+# def get_fisher_information_scores(model, dataset, unlabeled_indices):
+#     model.eval()
+#     fisher_scores = []
+#     loss_fn = torch.nn.BCELoss()
+#     epsilon = 1e-10
+
+#     for idx in unlabeled_indices:
+#         img, _, _ = dataset[idx]
+#         img = img.unsqueeze(0).to(device)
+
+#         with torch.no_grad():
+#             pseudo_label = model(img)
+
+#         img.requires_grad = True  # Still not necessary unless doing gradient w.r.t. input
+
+#         # Forward pass with gradient tracking
+#         pred = model(img)
+#         loss = loss_fn(pred, pseudo_label.detach())
+
+#         model.zero_grad()
+#         loss.backward()
+
+#         fisher_score = 0.0
+#         for param in model.parameters():
+#             if param.grad is not None:
+#                 fisher_score += (param.grad ** 2).sum().item()
+
+#         fisher_scores.append((fisher_score, idx))
+
+#     return fisher_scores
+
+def get_fisher_information_scores(model, dataset, unlabeled_indices, batch_size=8):
     model.eval()
     fisher_scores = []
     loss_fn = torch.nn.BCELoss()
-    epsilon = 1e-10
-
-    for idx in unlabeled_indices:
-        img, _, _ = dataset[idx]
-        img = img.unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            pseudo_label = model(img)
-
-        img.requires_grad = True  # Still not necessary unless doing gradient w.r.t. input
-
-        # Forward pass with gradient tracking
-        pred = model(img)
-        loss = loss_fn(pred, pseudo_label.detach())
-
+    
+    for i in range(0, len(unlabeled_indices), batch_size):
+        batch_indices = unlabeled_indices[i:i+batch_size]
+        imgs = torch.stack([dataset[idx][0] for idx in batch_indices]).to(device)
+        preds = model(imgs)
+        loss = loss_fn(preds, preds.detach())
         model.zero_grad()
         loss.backward()
 
-        fisher_score = 0.0
-        for param in model.parameters():
-            if param.grad is not None:
-                fisher_score += (param.grad ** 2).sum().item()
+        grads = []
+        for name, param in model.named_parameters():
+            if 'final' in name and param.grad is not None:
+                grads.append((param.grad ** 2).sum(dim=1))  # if shape allows
 
-        fisher_scores.append((fisher_score, idx))
+        batch_scores = [g.item() for g in grads]
+        fisher_scores.extend(zip(batch_scores, batch_indices))
 
     return fisher_scores
 
