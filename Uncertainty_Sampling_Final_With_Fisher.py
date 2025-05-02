@@ -1,7 +1,7 @@
 # Uncertainty Sampling with Batch Selection
 
 """
-This script enhances the uncertainty sampling framework for active learning in medical image segmentation tasks.
+This script improves on the uncertainty sampling framework for active learning in medical image segmentation tasks.
 It builds on the basic approach by integrating Fisher Information with pixel-wise entropy to better prioritize
 unlabeled samples that are both uncertain and informative.
 
@@ -38,12 +38,12 @@ def set_all_seeds(seed):
 USE_WARM_START = True
 RESET_EVERY_N = 3  
 
-name_extension = "uncertainty_sampling_full_training"
+name_extension = "uncertainty_sampling_with_fisher_training"
 model_dir = f"{name_extension}/models"
 results_dir = f'{name_extension}/results'
-title_prefix = "Uncertainty Sampling Full Learning"
+title_prefix = "Uncertainty Sampling With Fisher Learning"
 plot_dir = f"{name_extension}/plots"
-plots_title_prefix = "Uncertainty Sampling Full Learning"
+plots_title_prefix = "Uncertainty Sampling With Fisher Learning"
 
 os.makedirs(results_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
@@ -361,7 +361,7 @@ plt.title(f"{plots_title_prefix}: Mean Training Dice Score vs Training Set Size"
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Train Set Dice Score")
 plt.grid(True)
-plt.savefig(f"{plot_dir}/MeanTrainingDiceScore_US_Fisher_Full.png", bbox_inches='tight')
+plt.savefig(f"{plot_dir}/MeanTrainingDiceScore_US_Fisher.png", bbox_inches='tight')
 
 means_test = np.array([np.mean(test_results[s]) for s in dataset_sizes])
 stds_test = np.array([np.std(test_results[s]) for s in dataset_sizes])
@@ -371,7 +371,7 @@ plt.title(f"{plots_title_prefix}: Mean Test Set Dice Score vs Training Set Size"
 plt.xlabel("Training Set Size")
 plt.ylabel("Mean Test Set Dice Score")
 plt.grid(True)
-plt.savefig(f"{plot_dir}/MeanTestDiceScore_US_Fisher_Full.png", bbox_inches='tight')
+plt.savefig(f"{plot_dir}/MeanTestDiceScore_US_With_Fisher.png", bbox_inches='tight')
 
 
 plt.figure(figsize=(8, 6))
@@ -390,16 +390,16 @@ plt.grid(True)
 
 # Save or show
 plt.tight_layout()
-plt.savefig(f"{plot_dir}/MeanBothDiceScore_US_Fisher_Full.png", dpi=300)
+plt.savefig(f"{plot_dir}/MeanBothDiceScore_US_With_Fisher.png", dpi=300)
 #plt.show()
 
 print("Saved Figures")
 
 train_df = pd.DataFrame(train_results)
-train_df.to_csv(f"{plot_dir}/TrainDiceScores_US_Fisher_Full.csv", index=False)
+train_df.to_csv(f"{plot_dir}/TrainDiceScores_US_with_Fisher.csv", index=False)
 
 test_df = pd.DataFrame(test_results)
-test_df.to_csv(f"{plot_dir}/TestDiceScores_US_Fisher_Full.csv", index=False)
+test_df.to_csv(f"{plot_dir}/TestDiceScores_US_With_Fisher.csv", index=False)
 
 print("Saved US train/test Dice scores to CSV")
 

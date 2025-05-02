@@ -27,7 +27,7 @@ import heapq
 
 import boto3
 
-os.makedirs("results", exist_ok=True)
+os.makedirs("results_UncertaintySamplingWithoutFisher", exist_ok=True)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -258,7 +258,7 @@ dataset_sizes = sorted(train_results.keys())
 # Generate and Save Plot 
 file1 = plot_train_test(train_results, test_results, dataset_sizes,
                         "Uncertainty Sampling: Dice Scores vs Training Set Size",
-                        "UncertaintySampling_Full_DiceScores", color_train="blue", color_test="orange")
+                        "UncertaintySampling_Without_Fisher_DiceScores", color_train="blue", color_test="orange")
 
 # Save CSVs
 csv_files = []
@@ -270,8 +270,8 @@ def save_df(data, name):
     csv_files.append(filename)
     return filename
 
-save_df(train_results, "UncertaintySampling_Full_TrainDiceScores")
-save_df(test_results, "UncertaintySampling_Full_TestDiceScores")
+save_df(train_results, "UncertaintySampling_Without_Fisher_TrainDiceScores")
+save_df(test_results, "UncertaintySampling_Without_Fisher_TestDiceScores")
 
 print("Saved train/test Dice scores to CSV")
 
