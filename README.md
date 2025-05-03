@@ -48,13 +48,15 @@ Implements the density-diversity based sampling method.
 
 Expected folder structure under `data/`:
 
-+-- data
-    +-- images_train/ # Training images (PNG)
-    +-- images_mask/ # Training masks (PNG)
-    +-- images_test/ # Test images (PNG)
-    +-- images_test_masks/ # Test masks (PNG)
-    +-- images_val/ # Validation images (PNG)
-    +-- images_val_masks/ # Validation masks (PNG)
+```
+data/
+├── images_train/ # Training images (PNG)
+├── images_mask/ # Training masks (PNG)
+├── images_test/ # Test images (PNG)
+├── images_test_masks/ # Test masks (PNG)
+├── images_val/ # Validation images (PNG)
+├── images_val_masks/ # Validation masks (PNG)
+```
 
 
 These folders are included in the zip archive provided with this submission.
