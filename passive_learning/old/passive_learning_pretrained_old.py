@@ -1,3 +1,6 @@
+# This script is also meant for AWS, if you want to run it on local you may comment out boto3 and s3 saving
+# This script is identical to the newer scripts for passive learning except that this does not allow partial training
+# Any functionality that this script provides is provided better through the newer script. To get the same effect set USE_WARM_START = False in the new script
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
@@ -59,10 +62,11 @@ def unpad_to_shape(x, original_h, original_w):
     return x[..., :original_h, :original_w]
 
 """## Load Data"""
-
-train_ds = CellSegmentationDataset("../data/images_train", "../data/masks_train")
-val_ds =  CellSegmentationDataset("../data/images_val", "../data/masks_val")
-test_ds = CellSegmentationDataset("../data/images_test", "../data/masks_test")
+# Adjust these file paths as required
+data_dir = "../data"
+train_ds = CellSegmentationDataset(f"{data_dir}/images_train", f"{data_dir}/masks_train")
+val_ds =  CellSegmentationDataset(f"{data_dir}/images_val", f"{data_dir}/masks_val")
+test_ds = CellSegmentationDataset(f"{data_dir}/images_test", f"{data_dir}/masks_test")
 
 train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
 val_loader = DataLoader(val_ds, batch_size=4)
@@ -178,7 +182,7 @@ model = smp.Unet(
 #     show_prediction(img, mask, filename=fname)
 
 """# Passive Learning Style Training"""
-
+# Function to allow passive learning
 def evaluate_model_on_subset(dataset, subset_indices, test_loader, epochs=5):
     subset = Subset(dataset, subset_indices)
     loader = DataLoader(subset, batch_size=4, shuffle=True)
@@ -234,10 +238,8 @@ n_simulations = 5
 all_indices = list(range(len(train_ds)))
 dataset_sizes = list(range(initial_size, max_size + 1, increment))
 
-# all_indices = list(range(len(train_subset)))
-# dataset_sizes = list(range(initial_size, max_size + 1, increment))
-
 train_results, test_results = {}, {}
+# Passive Learning Loop
 for sim in range(n_simulations):
     random.seed(sim)
     shuffled_indices = all_indices.copy()
@@ -250,6 +252,7 @@ for sim in range(n_simulations):
         train_results.setdefault(size, []).append(train_dice)
         test_results.setdefault(size, []).append(test_dice)
 
+# Plotting
 means_train = np.array([np.mean(train_results[s]) for s in dataset_sizes])
 stds_train = np.array([np.std(train_results[s]) for s in dataset_sizes])
 plt.plot(dataset_sizes, means_train, '-o')
