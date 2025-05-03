@@ -10,7 +10,7 @@ This repository contains code and data for our project exploring active learning
 Contains code to convert COCO-format annotations into PNG masks.
 
 - `data_preprocessing.ipynb`: Converts COCO annotations into binary mask images using `pycocotools`.  
-  🔗 **Data required**: Please download from the [LIVECell dataset website](https://sartorius-research.github.io/LIVECell/).
+  **Data required**: Please download from the [LIVECell dataset website](https://sartorius-research.github.io/LIVECell/).
 
 ---
 
