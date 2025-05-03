@@ -47,9 +47,10 @@ def pad_to_multiple(x, multiple=32):
     pad_w = (multiple - w % multiple) % multiple
     return F.pad(x, (0, pad_w, 0, pad_h))
 
-train_ds = CellSegmentationDataset("data/images_train", "data/masks_train")
-val_ds = CellSegmentationDataset("data/images_val", "data/masks_val")
-test_ds = CellSegmentationDataset("data/images_test", "data/masks_test")
+data_dir = "../data"
+train_ds = CellSegmentationDataset(f"{data_dir}/images_train", f"{data_dir}/masks_train")
+val_ds =  CellSegmentationDataset(f"{data_dir}/images_val", f"{data_dir}/masks_val")
+test_ds = CellSegmentationDataset(f"{data_dir}/images_test", f"{data_dir}/masks_test")
 
 def extract_features(dataset, batch_size=16, cache_path="cached_features.npy"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
