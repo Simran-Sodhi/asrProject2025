@@ -1,4 +1,4 @@
-# Leveraging Active Learning for Cell Identification in Phase Contrast Microscopic Images
+# Active learning framework for improving cell segmentation in phase contrastt microscopy images using uncertainty and diversity-based sampling.
 
 This repository contains code and data for our project exploring active learning strategies—uncertainty sampling and density-diversity sampling—for efficient cell segmentation from phase-contrast microscopy images using the LIVECell dataset.
 
